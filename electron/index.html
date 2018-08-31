@@ -1,0 +1,165 @@
+<script src="../node_modules/vue/dist/vue.js"></script>
+
+<div id="vue-root">
+    <note-list v-on:handle-note-selection="handleNoteSelection"></note-list>        
+</div>
+
+<script>
+    Vue.component("note-item", {
+        props: ["note"],
+
+        data: function() {
+            return { formattedHTML: "No Note Selected", noteObject: {} }
+        },
+
+        watch: {
+            note: function(newNote, oldNote){
+                console.log(newNote)
+                if (newNote.new) {
+                    this.formattedHTML = newNote.full_text
+                    this.noteObject = newNote
+                } else if (newNote.id > 0 && newNote.id != oldNote.id) {
+                    this.getNote(newNote.id)
+                }
+            }
+        },
+        
+        methods: {
+            getNote: function(noteID){
+                var vm = this;
+                fetch("http://localhost:3000/notes/"+noteID, { method: "get" })
+                    .then(response => response.json())
+                    .then(jsonData => {
+                        vm.formattedHTML = jsonData.text
+                        vm.noteObject = jsonData
+                    })
+                    .catch(err => {
+                        console.log(err)
+                    })                
+            },
+
+            saveNote: function(noteID){
+                var data = { id: noteID, title: document.getElementById('note-title').value, full_text: document.getElementById('note-input').value }
+
+                if (this.noteObject.new) {
+                    url    = "http://localhost:3000/notes"
+                    method = "POST"
+                } else {
+                    url    = "http://localhost:3000/notes/" + noteID
+                    method = "PUT"
+                }
+
+                fetch(url, {
+                    method: method,
+                    body: JSON.stringify(data),
+                    headers: { 'Content-Type': 'application/json' }
+                }).then(response => { 
+                    if (!this.noteObject.new) {
+                        this.getNote(noteID)
+                    }
+                    this.$parent.getNotes()
+                })
+            },
+
+            willWriteNote: function() {
+                return (this.note.id > 0) || this.note.new 
+            }
+
+        },
+
+        template: `
+            <div class="note-container">                
+                <div v-if="willWriteNote()" class="note-form">
+                    <input id="note-title" v-bind:value="noteObject.title"></input>
+                    <br/>
+                    <textarea id="note-input" rows="10" v-bind:value="noteObject.full_text">{{noteObject.full_text}}</textarea>
+                    <button id="save-note" v-on:click="saveNote(note.id)">Save</button>
+                </div>
+
+                <hr>
+
+                <div v-if="!noteObject.new" class="note.id" v-html="formattedHTML"></div>
+            </div>
+        `
+    })
+
+    Vue.component("note-list", {
+        data: function() {
+            return { notes: [] }
+        },
+
+        watch: {
+            notes: function(newNotes, oldNotes) {
+
+            }
+        },
+
+        created: function() {
+            this.getNotes()
+        },
+
+        methods: {
+            getNotes: function() {
+                fetch("http://localhost:3000/notes", { method: "get" })
+                    .then(response => response.json())
+                    .then(jsonData => this.notes = jsonData)
+            },
+
+            selectedNote: function(noteID) {
+                if (noteID == "new"){
+                    return { new: true, title: "New Note", full_text: "write your note here..." }
+                }else if (noteID <= 0) {
+                    return {}
+                } else {
+                    return this.notes.filter(note => note.id == noteID)[0]
+                }
+            }
+        },
+
+        template: `
+            <div class="notes">
+                <div class="note-list">
+                    <a href="#" v-on:click="$emit('handle-note-selection', 'new')">New</a>
+                    <ol>
+                        <li v-for="note in notes">
+                            {{note.title}} <a href="#" v-on:click="$emit('handle-note-selection', note.id)">view</a>
+                        </li>
+                    </ol>
+                </div>
+
+                <note-item v-bind:note="this.selectedNote(this.$root.selectedNote)"></note-item>
+                {{this.$root.selectedNote}}
+            </div>
+        `
+    })
+    
+    new Vue({ 
+        el: "#vue-root", 
+        data: { selectedNote: 0 },
+        methods: {
+            handleNoteSelection: function(noteID){
+                console.log(noteID)
+                this.selectedNote = noteID;
+            }
+        }
+    })
+</script>
+
+<style>
+.note-list{
+    float: left;
+    width: 20%;
+}
+
+.note-container{
+    float: right;
+    width: 75%;
+}
+
+input {
+    width: 100%
+}
+textarea {
+    width: 100%;
+}
+</style>
